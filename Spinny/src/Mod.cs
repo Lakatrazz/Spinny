@@ -225,6 +225,13 @@ public class SpinnyMod : MelonMod
     {
         float radians = physicsRig.groundAngVelocity * Time.deltaTime;
 
+        var collider = physicsRig.physG._groundedCollider;
+
+        if (collider != null && collider.attachedRigidbody)
+        {
+            radians *= CalculateMassSupport(collider.attachedRigidbody);
+        }
+
         _targetSpin = radians;
     }
 
@@ -267,7 +274,7 @@ public class SpinnyMod : MelonMod
 
             var armMass = physHand._upperArmRb.mass + physHand._lowerArmRb.mass + physHand._handRb.mass;
 
-            float massPercent = Mathf.Clamp01((armMass / selfArmMass) * 2f);
+            float massPercent = Mathf.Clamp01(armMass / (selfArmMass * 2f));
 
             totalAngularVelocity += hand.physHand._upperArmRb.angularVelocity.y * massPercent;
             totalHands++;
@@ -305,12 +312,12 @@ public class SpinnyMod : MelonMod
         // Inverse forces
         if (leftContribution.rigidbody)
         {
-            leftContribution.rigidbody.AddTorque(Vector3.up * -leftVelocity * 0.5f, ForceMode.VelocityChange);
+            leftContribution.rigidbody.AddTorque(Vector3.up * -leftVelocity * 0.2f, ForceMode.VelocityChange);
         }
 
         if (rightContribution.rigidbody)
         {
-            rightContribution.rigidbody.AddTorque(Vector3.up * -rightVelocity * 0.5f, ForceMode.VelocityChange);
+            rightContribution.rigidbody.AddTorque(Vector3.up * -rightVelocity * 0.2f, ForceMode.VelocityChange);
         }
     }
 
@@ -339,18 +346,27 @@ public class SpinnyMod : MelonMod
 
         var angularVelocity = rb.angularVelocity.y;
 
-        var massPercent = rb.mass / hand.manager.avatar.massTotal;
-        massPercent *= massPercent;
-
-        var velocityPercent = Mathf.Abs(angularVelocity) / 10f + 1f;
-        velocityPercent *= velocityPercent;
-
-        var massSupport = Mathf.Clamp01(massPercent * velocityPercent);
+        var massSupport = CalculateMassSupport(rb);
 
         float handSupport = Mathf.Abs(hand.physHand.handSupported) * massSupport;
 
         angularVelocity *= massSupport;
 
         return (handSupport, angularVelocity, rb);
+    }
+
+    private static float CalculateMassSupport(Rigidbody rigidbody)
+    {
+        var playerAvatar = Player.RigManager.avatar;
+        float playerMass = playerAvatar.massPelvis;
+
+        var angularVelocity = rigidbody.angularVelocity.y;
+
+        var massPercent = Mathf.Pow(rigidbody.mass / playerMass, 4f);
+
+        var velocityPercent = Mathf.Abs(angularVelocity) / 10f + 1f;
+        velocityPercent *= velocityPercent;
+
+        return Mathf.Clamp01(massPercent * velocityPercent);
     }
 }
