@@ -293,41 +293,64 @@ public class SpinnyMod : MelonMod
         float leftPercent = leftContribution.supported / total;
         float rightPercent = rightContribution.supported / total;
 
-        var angularVelocity = leftContribution.angularVelocity * leftPercent + rightContribution.angularVelocity * rightPercent;
+        var leftVelocity = leftContribution.angularVelocity * leftPercent;
+        var rightVelocity = rightContribution.angularVelocity * rightPercent;
 
-        float radians = angularVelocity.y * Time.deltaTime;
+        var angularVelocity = leftVelocity + rightVelocity;
+
+        float radians = angularVelocity * Time.deltaTime;
 
         _targetSpin = radians;
+
+        // Inverse forces
+        if (leftContribution.rigidbody)
+        {
+            leftContribution.rigidbody.AddTorque(Vector3.up * -leftVelocity * 0.5f, ForceMode.VelocityChange);
+        }
+
+        if (rightContribution.rigidbody)
+        {
+            rightContribution.rigidbody.AddTorque(Vector3.up * -rightVelocity * 0.5f, ForceMode.VelocityChange);
+        }
     }
 
-    private static (float supported, Vector3 angularVelocity) GetGrabContribution(Hand hand)
+    private static (float supported, float angularVelocity, Rigidbody rigidbody) GetGrabContribution(Hand hand)
     {
         if (hand.m_CurrentAttachedGO == null)
         {
-            return (0f, Vector3.zero);
+            return (0f, 0f, null);
         }
 
         var grip = Grip.Cache.Get(hand.m_CurrentAttachedGO);
 
         if (grip == null) 
         {
-            return (0f, Vector3.zero);
+            return (0f, 0f, null);
         }
 
         var host = grip.Host;
 
         if (host == null || !host.HasRigidbody)
         {
-            return (0f, Vector3.zero);
+            return (0f, 0f, null);
         }
 
-        float massSupport = (host.Rb.mass / hand.manager.avatar.massArm) - 0.5f;
-        massSupport = Mathf.Clamp01(massSupport * 2f);
+        var rb = host.Rb;
+
+        var angularVelocity = rb.angularVelocity.y;
+
+        var massPercent = rb.mass / hand.manager.avatar.massTotal;
+        massPercent *= massPercent;
+
+        var velocityPercent = Mathf.Abs(angularVelocity) / 10f + 1f;
+        velocityPercent *= velocityPercent;
+
+        var massSupport = Mathf.Clamp01(massPercent * velocityPercent);
 
         float handSupport = Mathf.Abs(hand.physHand.handSupported) * massSupport;
 
-        var angularVelocity = host.Rb.angularVelocity * massSupport;
+        angularVelocity *= massSupport;
 
-        return (handSupport, angularVelocity);
+        return (handSupport, angularVelocity, rb);
     }
 }
